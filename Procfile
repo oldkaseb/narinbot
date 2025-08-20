@@ -1,1 +1,1 @@
-worker: python -u main_final_pg.py
+worker: python -u main.py
