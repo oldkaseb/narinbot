@@ -3,6 +3,8 @@ import asyncio
 import asyncpg
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 # ==================== Config from ENV ====================
@@ -151,7 +153,7 @@ def is_admin(user_id: int) -> bool:
 # ==================== Bot init ====================
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN تنظیم نشده است.")
-bot = Bot(BOT_TOKEN, parse_mode="HTML")
+bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # ==================== Keyboards ====================
