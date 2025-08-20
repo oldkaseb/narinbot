@@ -160,6 +160,9 @@ async def init_db():
     DB_POOL = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
     async with DB_POOL.acquire() as conn:
         await conn.execute(CREATE_SQL)
+        # --- schema migrations (idempotent) ---
+        await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;')
+        await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked BOOLEAN NOT NULL DEFAULT FALSE;')
         # seed default rules
         for section, kind, text in DEFAULT_RULES:
             await conn.execute(
@@ -726,38 +729,6 @@ async def on_admin_reply_any(m: Message, state: FSMContext):
 class SetRules(StatesGroup):
     waiting_for_text = State()
 
-# @dp.message(Command("setrules"))  # disabled
-async def cmd_setrules(m: Message, state: FSMContext, command: CommandObject):
-    if m.chat.type != "private" or not await require_admin_msg(m):
-        return
-    if not command.args:
-        return await m.answer("فرمت: /setrules <section> <kind>\nمثال: /setrules souls chat")
-    args = command.args.strip().split()
-    if len(args) != 2:
-        return await m.answer("باید دقیقاً دو آرگومان بدهید: section و kind (مثلاً: souls chat)")
-    section, kind = args
-    if section not in {"souls", "bots", "vserv"}:
-        return await m.answer("section نامعتبر است. یکی از: souls, bots, vserv")
-    await state.set_state(SetRules.waiting_for_text)
-    await state.update_data(section=section, kind=kind)
-    await m.answer(f"متن جدید قوانین برای {section}/{kind} را بفرستید. لغو: /cancel")
-
-# @dp.message(Command("setchat"))  # disabled
-async def cmd_setchat(m: Message, state: FSMContext):
-    if m.chat.type != "private" or not await require_admin_msg(m):
-        return
-    await state.set_state(SetRules.waiting_for_text)
-    await state.update_data(section="souls", kind="chat")
-    await m.answer("متن قوانین جدید برای «چت گروه Souls» را بفرستید. لغو: /cancel")
-
-# @dp.message(Command("setcall"))  # disabled
-async def cmd_setcall(m: Message, state: FSMContext):
-    if m.chat.type != "private" or not await require_admin_msg(m):
-        return
-    await state.set_state(SetRules.waiting_for_text)
-    await state.update_data(section="souls", kind="call")
-    await m.answer("متن قوانین جدید برای «کال گروه Souls» را بفرستید. لغو: /cancel")
-
 @dp.message(Command("setvserv"))
 async def cmd_setvserv(m: Message, state: FSMContext):
     if m.chat.type != "private" or not await require_admin_msg(m):
@@ -966,34 +937,6 @@ async def private_fallback(m: Message, state: FSMContext):
         return
     await m.answer("برای شروع از /menu استفاده کنید.")
 
-
-
-# -------------------- Help command --------------------
-@dp.message(Command("help"))
-async def cmd_help(m: Message):
-    if m.chat.type != "private":
-        return
-    await upsert_user(m)
-    u = await get_user(m.from_user.id)
-    is_admin = bool(u and u.is_admin)
-    user_help = (
-        "راهنما:\n"
-        "— /start یا /menu : آغاز و نمایش منو.\n"
-        "— منو: فقط «🛍️ خدمات مجازی» فعال است.\n"
-        "— در گروه‌ها با نوشتن «نارین»، لینک پیام‌دادن به منشی ارسال می‌شود.\n"
-    )
-    admin_help = (
-        "\nدستورات ادمین:\n"
-        "— /setvserv : تنظیم متن خدمات مجازی.\n"
-        "— /broadcast : پیام همگانی به کاربران.\n"
-        "— /groupsend : پیام همگانی به گروه‌های ثبت‌شده.\n"
-        "— /listgroups : لیست گروه‌های ثبت‌شده.\n"
-        "— /stats : آمار کاربران/گروه‌ها.\n"
-        "— /addadmin <id> ، /deladmin <id> ، /block <id> ، /unblock <id>\n"
-        "— /reply <id> : پاسخ مستقیم به کاربر.\n"
-        "— /cancel : لغو حالت جاری.\n"
-    )
-    await m.answer(user_help + (admin_help if is_admin else ""))
 # -------------------- Entrypoint --------------------
 async def main():
     global BOT_USERNAME, DB_POOL
@@ -1015,3 +958,29 @@ if __name__ == "__main__":
 
 
 
+
+@dp.message(Command("help"))
+async def cmd_help(m: Message):
+    if m.chat.type != "private":
+        return
+    await upsert_user(m)
+    u = await get_user(m.from_user.id)
+    is_admin = bool(u and u.is_admin)
+    user_help = (
+        "راهنما:\n"
+        "— /start یا /menu : شروع و نمایش منو.\n"
+        "— منو: فقط «🛍️ خدمات مجازی» فعال است.\n"
+        "— در گروه‌ها با نوشتن «نارین»، لینک پیام‌دادن به منشی ارسال می‌شود.\n"
+    )
+    admin_help = (
+        "\nدستورات ادمین:\n"
+        "— /setvserv : تنظیم متن خدمات مجازی.\n"
+        "— /broadcast : پیام همگانی به کاربران.\n"
+        "— /groupsend : پیام همگانی به گروه‌های ثبت‌شده.\n"
+        "— /listgroups : لیست گروه‌های ثبت‌شده.\n"
+        "— /stats : آمار کاربران/گروه‌ها.\n"
+        "— /addadmin <id> ، /deladmin <id> ، /block <id> ، /unblock <id>\n"
+        "— /reply <id> : پاسخ مستقیم به کاربر.\n"
+        "— /cancel : لغو حالت جاری.\n"
+    )
+    await m.answer(user_help + (admin_help if is_admin else ""))
